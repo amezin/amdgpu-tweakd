@@ -14,13 +14,21 @@ class HwmonDevice:
                 print(sysfs_path, key + ":", ex)
                 return default
 
+        def getsysfs(key, default):
+            path = self.sysfs_path / key;
+            try:
+                return float(path.read_text()) / 1000.0
+            except Exception as ex:
+                print("Can't read {}: {}".format(path, ex))
+                return float(default)
+
         self.sysfs_path = pathlib.Path(sysfs_path)
         self.pwm_path = self.sysfs_path / 'pwm1'
         self.temp_path = self.sysfs_path / 'temp1_input'
-        self.pwm_min = getfloat('pwm_min', 0.0)
-        self.pwm_max = getfloat('pwm_max', 255.0)
+        self.pwm_min = getfloat('pwm_min', getsysfs('pwm1_min', 0.0))
+        self.pwm_max = getfloat('pwm_max', getsysfs('pwm1_max', 255.0))
         self.temp_min = getfloat('temp_min', 40.0)
-        self.temp_max = getfloat('temp_max', 85.0)
+        self.temp_max = getfloat('temp_max', getsysfs('temp1_crit', 90000.0) / 1000.0 - 5.0)
         self.pwm_delta = self.pwm_max - self.pwm_min
         self.temp_delta = self.temp_max - self.temp_min
         self.curve_pow = getfloat('curve_pow', 2.0)
