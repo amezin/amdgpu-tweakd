@@ -1,3 +1,4 @@
-[/sys/devices/pci0000:64/0000:64:00.0/0000:65:00.0/0000:66:00.0/0000:67:00.0/hwmon/hwmon2]
+# Sapphire Vega 64 Nitro+
+[/sys/devices/pci0000:64/0000:64:00.0/0000:65:00.0/0000:66:00.0/0000:67:00.0/hwmon/hwmon*]
 pwm_min=33
 temp_min=45

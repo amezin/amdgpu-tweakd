@@ -1,5 +1,6 @@
 import argparse
 import configparser
+import glob
 import pathlib
 import time
 
@@ -61,12 +62,18 @@ def main(*args, **kwargs):
     config = configparser.ConfigParser()
     config.read(arg.config)
 
-    devices = [HwmonDevice(section, config[section]) for section in config.sections()]
+    devices = {}
 
     while True:
-        for device in devices:
-            if device.sysfs_path.exists():
-                device.update()
+        devices = { path: dev for path, dev in devices.items() if dev.sysfs_path.exists() }
+
+        for section in config.sections():
+            for resolved_path in glob.glob(section):
+                if resolved_path not in devices:
+                    devices[resolved_path] = HwmonDevice(resolved_path, config[section])
+
+        for device in devices.values():
+            device.update()
 
         time.sleep(1)
 
