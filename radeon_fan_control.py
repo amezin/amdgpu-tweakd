@@ -3,6 +3,7 @@ import configparser
 import glob
 import pathlib
 import time
+import logging
 
 
 class HwmonDevice:
@@ -12,7 +13,7 @@ class HwmonDevice:
             try:
                 return float(value)
             except ValueError as ex:
-                print(sysfs_path, key + ":", ex)
+                logging.error("%s.%s: %s", sysfs_path, key, ex)
                 return default
 
         def getsysfs(key, default):
@@ -20,7 +21,7 @@ class HwmonDevice:
             try:
                 return float(path.read_text())
             except Exception as ex:
-                print("Can't read {}: {}".format(path, ex))
+                logging.error("Can't read %s: %s", path, ex)
                 return float(default)
 
         self.sysfs_path = pathlib.Path(sysfs_path)
@@ -35,7 +36,9 @@ class HwmonDevice:
         self.curve_pow = getfloat('curve_pow', 2.0)
 
         for k in config.keys():
-            print("Unknown parameter {!r}".format(k))
+            logging.warning("Unknown parameter %r", k)
+
+        logging.info("Created device: %r", self.__dict__)
 
     @property
     def temp(self):
@@ -58,6 +61,8 @@ def main(*args, **kwargs):
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=pathlib.Path)
     arg = parser.parse_args(*args, **kwargs)
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     config = configparser.ConfigParser()
     config.read(arg.config)
