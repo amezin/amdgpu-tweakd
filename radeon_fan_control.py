@@ -18,7 +18,7 @@ class HwmonDevice:
         def getsysfs(key, default):
             path = self.sysfs_path / key;
             try:
-                return float(path.read_text()) / 1000.0
+                return float(path.read_text())
             except Exception as ex:
                 print("Can't read {}: {}".format(path, ex))
                 return float(default)
