@@ -26,6 +26,7 @@ class HwmonDevice:
 
         self.sysfs_path = pathlib.Path(sysfs_path)
         self.pwm_path = self.sysfs_path / 'pwm1'
+        self.pwm_enable_path = self.sysfs_path / 'pwm1_enable'
         self.temp_path = self.sysfs_path / 'temp1_input'
         self.pwm_min = getfloat('pwm_min', getsysfs('pwm1_min', 0.0))
         self.pwm_max = getfloat('pwm_max', getsysfs('pwm1_max', 255.0))
@@ -37,6 +38,9 @@ class HwmonDevice:
 
         for k in config.keys():
             logging.warning("Unknown parameter %r", k)
+
+        self.prev_pwm_enable = self.pwm_enable
+        self.pwm_enable = b'1'
 
         logging.info("Created device: %r", self.__dict__)
 
@@ -51,6 +55,14 @@ class HwmonDevice:
     @pwm.setter
     def pwm(self, value):
         self.pwm_path.write_bytes(str(int(value)).encode('ascii'))
+
+    @property
+    def pwm_enable(self):
+        return self.pwm_enable_path.read_bytes()
+
+    @pwm_enable.setter
+    def pwm_enable(self, value):
+        self.pwm_enable_path.write_bytes(value)
 
     def update(self):
         temp_fraction = min(1.0, max(0.0, (self.temp - self.temp_min)) / self.temp_delta);
@@ -69,18 +81,23 @@ def main(*args, **kwargs):
 
     devices = {}
 
-    while True:
-        devices = { path: dev for path, dev in devices.items() if dev.sysfs_path.exists() }
+    try:
+        while True:
+            devices = { path: dev for path, dev in devices.items() if dev.sysfs_path.exists() }
 
-        for section in config.sections():
-            for resolved_path in glob.glob(section):
-                if resolved_path not in devices:
-                    devices[resolved_path] = HwmonDevice(resolved_path, config[section])
+            for section in config.sections():
+                for resolved_path in glob.glob(section):
+                    if resolved_path not in devices:
+                        devices[resolved_path] = HwmonDevice(resolved_path, config[section])
 
-        for device in devices.values():
-            device.update()
+            for device in devices.values():
+                device.update()
 
-        time.sleep(1)
+            time.sleep(1)
+
+    finally:
+        for dev in devices.values():
+            dev.pwm_enable = dev.prev_pwm_enable
 
 
 if __name__ == '__main__':
