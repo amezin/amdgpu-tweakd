@@ -39,8 +39,7 @@ class HwmonDevice:
         for k in config.keys():
             logging.warning("Unknown parameter %r", k)
 
-        self.prev_pwm_enable = self.pwm_enable
-        self.pwm_enable = b'1'
+        self.prev_pwm_enable = None
 
         logging.info("Created device: %r", self.__dict__)
 
@@ -58,15 +57,25 @@ class HwmonDevice:
 
     @property
     def pwm_enable(self):
-        return self.pwm_enable_path.read_bytes()
+        return self.pwm_enable_path.read_bytes().rstrip()
 
     @pwm_enable.setter
     def pwm_enable(self, value):
         self.pwm_enable_path.write_bytes(value)
 
     def update(self):
+        cur_pwm_enable = self.pwm_enable
+        if cur_pwm_enable != b'1':
+            self.prev_pwm_enable = cur_pwm_enable
+            self.pwm_enable = b'1'
+            logging.info("Enabled fan speed control for %s", self.sysfs_path)
+
         temp_fraction = min(1.0, max(0.0, (self.temp - self.temp_min)) / self.temp_delta);
         self.pwm = self.pwm_min + self.pwm_delta * pow(temp_fraction, self.curve_pow);
+
+    def restore_pwm_enable(self):
+        if self.prev_pwm_enable is not None:
+            self.pwm_enable = self.prev_pwm_enable
 
 
 def main(*args, **kwargs):
@@ -97,7 +106,7 @@ def main(*args, **kwargs):
 
     finally:
         for dev in devices.values():
-            dev.pwm_enable = dev.prev_pwm_enable
+            dev.restore_pwm_enable()
 
 
 if __name__ == '__main__':
