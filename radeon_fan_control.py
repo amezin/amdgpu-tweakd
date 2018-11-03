@@ -103,6 +103,8 @@ def main(*args, **kwargs):
                 device.update()
 
             time.sleep(1)
+    except KeyboardInterrupt:
+        pass
 
     finally:
         for dev in devices.values():
