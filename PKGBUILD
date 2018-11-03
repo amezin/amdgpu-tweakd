@@ -14,7 +14,4 @@ build() {
 
 package() {
     python setup.py install --prefix=/usr --root="${pkgdir}/" --optimize=1 --skip-build
-
-    install -m755 -d ${pkgdir}/usr/lib/systemd/system
-    install -m644 radeon-fan-control.service ${pkgdir}/usr/lib/systemd/system/
 }
