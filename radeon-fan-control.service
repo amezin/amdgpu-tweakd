@@ -3,7 +3,7 @@ Description=Radeon fan control
 ConditionPathExists=/etc/radeon-fan-control
 
 [Service]
-ExecStart=/usr/bin/radeon-fan-control /etc/radeon-fan-control
+ExecStart={install_scripts}/radeon-fan-control /etc/radeon-fan-control
 KillSignal=SIGINT
 
 [Install]
