@@ -6,7 +6,7 @@ import signal
 import time
 import logging
 
-from gi.repository import GLib
+from gi.repository import GLib, Gio
 
 
 class HwmonDevice:
@@ -87,8 +87,12 @@ class FanControlService:
         self.devices = {}
         self.timeout_source = None
         self.main_context = main_context
+        self.sleep = False
 
     def update(self):
+        if self.sleep:
+            return
+
         self.devices = { path: dev for path, dev in self.devices.items() if dev.sysfs_path.exists() }
 
         for section in self.config.sections():
@@ -110,6 +114,20 @@ class FanControlService:
         self.timeout_source.set_callback(lambda _: self.update())
         self.timeout_source.attach(self.main_context)
 
+    def prepare_for_sleep(self, start):
+        if start:
+            logging.info("Preparing for sleep...")
+            self.sleep = True
+            self.restore_pwm_enable()
+        else:
+            logging.info("Woke up")
+            self.sleep = False
+            self.schedule_update()
+
+    def logind_signal(self, proxy, sender, signal_name, args):
+        if signal_name == 'PrepareForSleep':
+            self.prepare_for_sleep(args[0])
+
 
 def main(*args, **kwargs):
     main_loop = GLib.MainLoop()
@@ -126,7 +144,17 @@ def main(*args, **kwargs):
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, main_loop.quit)
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, main_loop.quit)
 
+    bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    logind = Gio.DBusProxy.new_sync(bus,
+                                    Gio.DBusProxyFlags.DO_NOT_LOAD_PROPERTIES,
+                                    None,
+                                    'org.freedesktop.login1',
+                                    '/org/freedesktop/login1',
+                                    'org.freedesktop.login1.Manager',
+                                    None)
+
     service = FanControlService(config, main_loop.get_context())
+    logind.connect('g-signal', service.logind_signal)
     service.schedule_update()
 
     try:
