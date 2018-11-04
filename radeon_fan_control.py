@@ -82,11 +82,9 @@ class HwmonDevice:
 
 
 class FanControlService:
-    def __init__(self, config, main_context):
+    def __init__(self, config):
         self.config = config
         self.devices = {}
-        self.timeout_source = None
-        self.main_context = main_context
         self.sleep = False
 
     def update(self):
@@ -110,9 +108,7 @@ class FanControlService:
             dev.restore_pwm_enable()
 
     def schedule_update(self):
-        self.timeout_source = GLib.timeout_source_new_seconds(1)
-        self.timeout_source.set_callback(lambda _: self.update())
-        self.timeout_source.attach(self.main_context)
+        GLib.timeout_add_seconds(1, self.update)
 
     def prepare_for_sleep(self, start):
         if start:
@@ -153,7 +149,7 @@ def main(*args, **kwargs):
                                     'org.freedesktop.login1.Manager',
                                     None)
 
-    service = FanControlService(config, main_loop.get_context())
+    service = FanControlService(config)
     logind.connect('g-signal', service.logind_signal)
     service.schedule_update()
 
