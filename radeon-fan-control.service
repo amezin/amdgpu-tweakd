@@ -4,7 +4,6 @@ ConditionPathExists=/etc/radeon-fan-control
 
 [Service]
 ExecStart={install_scripts}/radeon-fan-control /etc/radeon-fan-control
-KillSignal=SIGINT
 
 [Install]
 WantedBy=multi-user.target

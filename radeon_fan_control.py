@@ -2,8 +2,11 @@ import argparse
 import configparser
 import glob
 import pathlib
+import signal
 import time
 import logging
+
+from gi.repository import GLib
 
 
 class HwmonDevice:
@@ -78,7 +81,39 @@ class HwmonDevice:
             self.pwm_enable = self.prev_pwm_enable
 
 
+class FanControlService:
+    def __init__(self, config, main_context):
+        self.config = config
+        self.devices = {}
+        self.timeout_source = None
+        self.main_context = main_context
+
+    def update(self):
+        self.devices = { path: dev for path, dev in self.devices.items() if dev.sysfs_path.exists() }
+
+        for section in self.config.sections():
+            for resolved_path in glob.glob(section):
+                if resolved_path not in self.devices:
+                    self.devices[resolved_path] = HwmonDevice(resolved_path, self.config[section])
+
+        for device in self.devices.values():
+            device.update()
+
+        self.schedule_update()
+
+    def restore_pwm_enable(self):
+        for dev in self.devices.values():
+            dev.restore_pwm_enable()
+
+    def schedule_update(self):
+        self.timeout_source = GLib.timeout_source_new_seconds(1)
+        self.timeout_source.set_callback(lambda _: self.update())
+        self.timeout_source.attach(self.main_context)
+
+
 def main(*args, **kwargs):
+    main_loop = GLib.MainLoop()
+
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=pathlib.Path)
     arg = parser.parse_args(*args, **kwargs)
@@ -88,27 +123,16 @@ def main(*args, **kwargs):
     config = configparser.ConfigParser()
     config.read(arg.config)
 
-    devices = {}
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, main_loop.quit)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, main_loop.quit)
+
+    service = FanControlService(config, main_loop.get_context())
+    service.schedule_update()
 
     try:
-        while True:
-            devices = { path: dev for path, dev in devices.items() if dev.sysfs_path.exists() }
-
-            for section in config.sections():
-                for resolved_path in glob.glob(section):
-                    if resolved_path not in devices:
-                        devices[resolved_path] = HwmonDevice(resolved_path, config[section])
-
-            for device in devices.values():
-                device.update()
-
-            time.sleep(1)
-    except KeyboardInterrupt:
-        pass
-
+        main_loop.run()
     finally:
-        for dev in devices.values():
-            dev.restore_pwm_enable()
+        service.restore_pwm_enable()
 
 
 if __name__ == '__main__':

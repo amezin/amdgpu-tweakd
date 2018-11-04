@@ -94,6 +94,7 @@ setuptools.setup(
     entry_points = {
         'console_scripts': ['radeon-fan-control=radeon_fan_control:main'],
     },
+    install_requires = ['PyGObject'],
     cmdclass = {
         'install_systemd_unit': InstallSystemdUnit,
         'install': Install
