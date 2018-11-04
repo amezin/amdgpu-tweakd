@@ -96,10 +96,16 @@ class FanControlService:
         for section in self.config.sections():
             for resolved_path in glob.glob(section):
                 if resolved_path not in self.devices:
-                    self.devices[resolved_path] = HwmonDevice(resolved_path, self.config[section])
+                    try:
+                        self.devices[resolved_path] = HwmonDevice(resolved_path, self.config[section])
+                    except Exception as ex:
+                        logging.exception("Failed to create device %s", resolved_path)
 
         for device in self.devices.values():
-            device.update()
+            try:
+                device.update()
+            except Exception as ex:
+                logging.exception("Failed to update device %s", device.sysfs_path)
 
         self.schedule_update()
 
