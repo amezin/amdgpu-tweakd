@@ -6,4 +6,4 @@ ConditionPathExists=/etc/radeon-fan-control
 ExecStart={install_scripts}/radeon-fan-control /etc/radeon-fan-control
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=basic.target
