@@ -1,12 +1,13 @@
 import argparse
+import asyncio
 import configparser
 import glob
 import pathlib
 import signal
-import time
 import logging
 
-from gi.repository import GLib, Gio
+import jeepney.bus_messages
+import jeepney.integrate.asyncio
 
 
 class HwmonDevice:
@@ -81,59 +82,87 @@ class HwmonDevice:
             self.pwm_enable = self.prev_pwm_enable
 
 
-class FanControlService:
-    def __init__(self, config):
-        self.config = config
-        self.devices = {}
-        self.sleep = False
+def update_devices(devices, config):
+    devices = { path: dev for path, dev in devices.items() if dev.sysfs_path.exists() }
 
-    def update(self):
-        if self.sleep:
-            return
+    for section in config.sections():
+        for resolved_path in glob.glob(section):
+            if resolved_path not in devices:
+                try:
+                    devices[resolved_path] = HwmonDevice(resolved_path, config[section])
+                except Exception as ex:
+                    logging.exception("Failed to create device %s", resolved_path)
 
-        self.devices = { path: dev for path, dev in self.devices.items() if dev.sysfs_path.exists() }
+    for device in devices.values():
+        try:
+            device.update()
+        except Exception as ex:
+            logging.exception("Failed to update device %s", device.sysfs_path)
 
-        for section in self.config.sections():
-            for resolved_path in glob.glob(section):
-                if resolved_path not in self.devices:
-                    try:
-                        self.devices[resolved_path] = HwmonDevice(resolved_path, self.config[section])
-                    except Exception as ex:
-                        logging.exception("Failed to create device %s", resolved_path)
+    return devices
 
-        for device in self.devices.values():
-            try:
-                device.update()
-            except Exception as ex:
-                logging.exception("Failed to update device %s", device.sysfs_path)
 
-        self.schedule_update()
+async def update_loop(config):
+    devices = {}
 
-    def restore_pwm_enable(self):
-        for dev in self.devices.values():
+    try:
+        while True:
+            devices = update_devices(devices, config)
+            await asyncio.sleep(1)
+
+    finally:
+        for dev in devices.values():
             dev.restore_pwm_enable()
 
-    def schedule_update(self):
-        GLib.timeout_add_seconds(1, self.update)
 
-    def prepare_for_sleep(self, start):
-        if start:
-            logging.info("Preparing for sleep...")
-            self.sleep = True
-            self.restore_pwm_enable()
+async def main_async(config):
+    wake_event = asyncio.Event()
+    wake_event.set()
+
+    update_loop_task = None
+
+    def prepare_for_sleep(sleep):
+        if sleep:
+            logging.info("Preparing for sleep")
+            wake_event.clear()
+            if update_loop_task:
+                update_loop_task.cancel()
         else:
+            wake_event.set()
             logging.info("Woke up")
-            self.sleep = False
-            self.schedule_update()
 
-    def logind_signal(self, proxy, sender, signal_name, args):
-        if signal_name == 'PrepareForSleep':
-            self.prepare_for_sleep(args[0])
+    _, dbus_proto = await jeepney.integrate.asyncio.connect_and_authenticate('SYSTEM')
+    dbus_bus = jeepney.integrate.asyncio.Proxy(jeepney.bus_messages.message_bus, dbus_proto)
+
+    dbus_proto.router.subscribe_signal(
+        callback=lambda args: prepare_for_sleep(*args),
+        path='/org/freedesktop/login1',
+        interface='org.freedesktop.login1.Manager',
+        member='PrepareForSleep'
+    )
+
+    await dbus_bus.AddMatch(jeepney.bus_messages.MatchRule(
+        type='signal',
+        sender='org.freedesktop.login1',
+        interface='org.freedesktop.login1.Manager',
+        member='PrepareForSleep',
+        path='/org/freedesktop/login1'
+    ))
+
+    while True:
+        logging.info("Waiting for wake event")
+        await wake_event.wait()
+        logging.info("Starting update loop")
+        update_loop_task = asyncio.ensure_future(update_loop(config))
+        try:
+            await update_loop_task
+        except asyncio.CancelledError:
+            logging.info("Stopped update loop")
+            if wake_event.is_set():
+                raise
 
 
 def main(*args, **kwargs):
-    main_loop = GLib.MainLoop()
-
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=pathlib.Path)
     arg = parser.parse_args(*args, **kwargs)
@@ -143,26 +172,17 @@ def main(*args, **kwargs):
     config = configparser.ConfigParser()
     config.read(arg.config)
 
-    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, main_loop.quit)
-    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, main_loop.quit)
+    main_loop = asyncio.get_event_loop()
+    main_task = main_loop.create_task(main_async(config))
 
-    bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
-    logind = Gio.DBusProxy.new_sync(bus,
-                                    Gio.DBusProxyFlags.DO_NOT_LOAD_PROPERTIES,
-                                    None,
-                                    'org.freedesktop.login1',
-                                    '/org/freedesktop/login1',
-                                    'org.freedesktop.login1.Manager',
-                                    None)
-
-    service = FanControlService(config)
-    logind.connect('g-signal', service.logind_signal)
-    service.schedule_update()
+    main_loop.add_signal_handler(signal.SIGINT, main_task.cancel)
+    main_loop.add_signal_handler(signal.SIGTERM, main_task.cancel)
 
     try:
-        main_loop.run()
-    finally:
-        service.restore_pwm_enable()
+        main_loop.run_until_complete(main_task)
+
+    except asyncio.CancelledError:
+        pass
 
 
 if __name__ == '__main__':
