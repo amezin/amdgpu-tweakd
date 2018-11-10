@@ -12,6 +12,8 @@ import jeepney.integrate.asyncio
 
 class HwmonDevice:
     def __init__(self, sysfs_path, config):
+        config = dict(config)
+
         def getfloat(key, default):
             value = config.pop(key, default)
             try:
