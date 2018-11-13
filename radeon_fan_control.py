@@ -109,8 +109,8 @@ async def update_loop(config):
 
     try:
         while True:
-            devices = update_devices(devices, config)
             await asyncio.sleep(1)
+            devices = update_devices(devices, config)
 
     finally:
         for dev in devices.values():
