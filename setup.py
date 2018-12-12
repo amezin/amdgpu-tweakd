@@ -3,7 +3,6 @@ import distutils.util
 import os.path
 import setuptools.command.install
 import subprocess
-import sys
 
 
 class InstallSystemdUnit(distutils.core.Command):
