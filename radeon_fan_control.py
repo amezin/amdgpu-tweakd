@@ -84,37 +84,33 @@ class HwmonDevice:
             self.pwm_enable = self.prev_pwm_enable
 
 
-def update_devices(devices, config):
-    devices = { path: dev for path, dev in devices.items() if dev.sysfs_path.exists() }
+async def update_loop(config):
+    devices = {}
 
     for section in config.sections():
         for resolved_path in glob.glob(section):
             if resolved_path not in devices:
                 try:
                     devices[resolved_path] = HwmonDevice(resolved_path, config[section])
-                except Exception as ex:
+                except Exception:
                     logging.exception("Failed to create device %s", resolved_path)
-
-    for device in devices.values():
-        try:
-            device.update()
-        except Exception as ex:
-            logging.exception("Failed to update device %s", device.sysfs_path)
-
-    return devices
-
-
-async def update_loop(config):
-    devices = {}
 
     try:
         while True:
             await asyncio.sleep(1)
-            devices = update_devices(devices, config)
+
+            for device in devices.values():
+                try:
+                    device.update()
+                except Exception:
+                    logging.exception("Failed to update device %s", device.sysfs_path)
 
     finally:
         for dev in devices.values():
-            dev.restore_pwm_enable()
+            try:
+                dev.restore_pwm_enable()
+            except Exception:
+                logging.exception("Failed to release device %s", dev.sysfs_path)
 
 
 async def main_async(config):
