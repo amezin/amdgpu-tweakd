@@ -60,7 +60,7 @@ class InstallSystemdUnit(distutils.core.Command):
             return
 
         if self.root is None:
-            return systemd_unit_dir
+            return system_unit_dir
 
         return distutils.util.change_root(self.root, system_unit_dir)
 
