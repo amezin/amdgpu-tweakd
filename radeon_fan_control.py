@@ -14,10 +14,10 @@ class HwmonDevice:
     def __init__(self, sysfs_path, config):
         config = dict(config)
 
-        def getfloat(key, default):
+        def getconfig(key, default):
             value = config.pop(key, default)
             try:
-                return float(value)
+                return type(default)(value)
             except ValueError as ex:
                 logging.error("%s.%s: %s", sysfs_path, key, ex)
                 return default
@@ -34,13 +34,16 @@ class HwmonDevice:
         self.pwm_path = self.sysfs_path / 'pwm1'
         self.pwm_enable_path = self.sysfs_path / 'pwm1_enable'
         self.temp_path = self.sysfs_path / 'temp1_input'
-        self.pwm_min = getfloat('pwm_min', getsysfs('pwm1_min', 0.0))
-        self.pwm_max = getfloat('pwm_max', getsysfs('pwm1_max', 255.0))
-        self.temp_min = getfloat('temp_min', 40.0)
-        self.temp_max = getfloat('temp_max', getsysfs('temp1_crit', 90000.0) / 1000.0 - 5.0)
+        self.pwm_min = getconfig('pwm_min', getsysfs('pwm1_min', 0.0))
+        self.pwm_max = getconfig('pwm_max', getsysfs('pwm1_max', 255.0))
+        self.temp_min = getconfig('temp_min', 40.0)
+        self.temp_max = getconfig('temp_max', getsysfs('temp1_crit', 90000.0) / 1000.0 - 5.0)
         self.pwm_delta = self.pwm_max - self.pwm_min
         self.temp_delta = self.temp_max - self.temp_min
-        self.curve_pow = getfloat('curve_pow', 2.0)
+        self.curve_pow = getconfig('curve_pow', 2.0)
+        self.semi_passive = getconfig('semi_passive', False)
+        self.semi_passive_hyst = getconfig('semi_passive_hyst', 5.0)
+        self.passive = False
 
         for k in config.keys():
             logging.warning("Unknown parameter %r", k)
@@ -76,6 +79,16 @@ class HwmonDevice:
             self.pwm_enable = b'1'
             logging.info("Enabled fan speed control for %s", self.sysfs_path)
 
+        if self.semi_passive and self.temp < self.temp_min:
+            self.pwm = 0
+            self.passive = True
+            return
+
+        if self.passive and self.temp < self.temp_min + self.semi_passive_hyst:
+            self.pwm = 0
+            return
+
+        self.passive = False
         temp_fraction = min(1.0, max(0.0, (self.temp - self.temp_min)) / self.temp_delta);
         self.pwm = self.pwm_min + self.pwm_delta * pow(temp_fraction, self.curve_pow);
 
