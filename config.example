@@ -1,5 +1,6 @@
-# Sapphire Vega 64 Nitro+
-[/sys/devices/pci0000:64/0000:64:00.0/0000:65:00.0/0000:66:00.0/0000:67:00.0/hwmon/hwmon*]
+[Sapphire Vega 64 Nitro+]
+pci_id=1002:687F
+vbios_version=113-D0500110-O01
 pwm_min=35
 temp_min=40
 curve_pow=3

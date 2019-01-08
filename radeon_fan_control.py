@@ -1,10 +1,12 @@
 import argparse
 import asyncio
 import configparser
-import glob
 import pathlib
 import signal
 import logging
+import sys
+
+import pyudev
 
 import jeepney.bus_messages
 import jeepney.integrate.asyncio
@@ -46,7 +48,9 @@ class HwmonDevice:
         self.passive = False
 
         for k in config.keys():
-            logging.warning("Unknown parameter %r", k)
+            if k.lower() not in DeviceMatchingInfo.ATTRS:
+                if k.upper() not in DeviceMatchingInfo.PROPS:
+                    logging.warning("Unknown parameter %r", k)
 
         self.prev_pwm_enable = None
 
@@ -97,16 +101,57 @@ class HwmonDevice:
             self.pwm_enable = self.prev_pwm_enable
 
 
-async def update_loop(config):
+class DeviceMatchingInfo:
+    ATTRS = ['device', 'vbios_version']
+    PROPS = ['PCI_ID', 'PCI_SLOT_NAME', 'PCI_SUBSYS_ID']
+    UDEV_ATTR_ENCODING = sys.getfilesystemencoding()
+
+    def __init__(self, device):
+        self.props = {
+            p: device.properties.get(p) for p in self.PROPS
+        }
+        self.attrs = {
+            a: device.attributes.get(a) for a in self.ATTRS
+        }
+
+    def match(self, section):
+        match_props = section & self.props.keys()
+        for p in match_props:
+            if section[p] != self.props[p]:
+                return -1
+
+        match_attrs = section & self.attrs.keys()
+        for a in match_attrs:
+            if section[a].encode(self.UDEV_ATTR_ENCODING) != self.attrs[a]:
+                return -1
+
+        return len(match_props) + len(match_attrs)
+
+    def best_match(self, config):
+        best_section, best_score = None, -1
+
+        for section_name in config.sections():
+            section = config[section_name]
+            score = self.match(section)
+
+            if score > best_score:
+                best_section, best_score = section, score
+
+        return best_section, best_score
+
+
+async def update_loop(config, udev):
     devices = {}
 
-    for section in config.sections():
-        for resolved_path in glob.glob(section):
-            if resolved_path not in devices:
-                try:
-                    devices[resolved_path] = HwmonDevice(resolved_path, config[section])
-                except Exception:
-                    logging.exception("Failed to create device %s", resolved_path)
+    for device in udev.list_devices(DRIVER='amdgpu'):
+        section, score = DeviceMatchingInfo(device).best_match(config)
+        if section is None:
+            continue
+
+        logging.info("Matched config %r to %r (score %d)", section.name, device, score)
+
+        for hwmon_device in udev.list_devices(subsystem='hwmon', parent=device):
+            devices[hwmon_device.sys_path] = HwmonDevice(hwmon_device.sys_path, section)
 
     try:
         while True:
@@ -127,6 +172,8 @@ async def update_loop(config):
 
 
 async def main_async(config):
+    udev = pyudev.Context()
+
     wake_event = asyncio.Event()
     wake_event.set()
 
@@ -164,7 +211,7 @@ async def main_async(config):
         logging.info("Waiting for wake event")
         await wake_event.wait()
         logging.info("Starting update loop")
-        update_loop_task = asyncio.ensure_future(update_loop(config))
+        update_loop_task = asyncio.ensure_future(update_loop(config, udev))
         try:
             await update_loop_task
         except asyncio.CancelledError:

@@ -93,7 +93,7 @@ setuptools.setup(
     entry_points = {
         'console_scripts': ['radeon-fan-control=radeon_fan_control:main'],
     },
-    install_requires = ['jeepney>=0.4'],
+    install_requires=['jeepney>=0.4', 'pyudev>=0.20'],
     cmdclass = {
         'install_systemd_unit': InstallSystemdUnit,
         'install': Install
