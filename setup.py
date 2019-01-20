@@ -18,7 +18,7 @@ class InstallSystemdUnit(distutils.core.Command):
 
     boolean_options = ['force']
 
-    unit_file = 'radeon-fan-control.service'
+    unit_file = 'amdgpu-tweakd.service'
 
     def initialize_options(self):
         self.outfiles = []
@@ -88,12 +88,17 @@ class Install(setuptools.command.install.install):
 
 
 setuptools.setup(
-    name='radeon-fan-control',
-    py_modules=['radeon_fan_control'],
-    entry_points = {
-        'console_scripts': ['radeon-fan-control=radeon_fan_control:main'],
+    name='amdgpu-tweakd',
+    py_modules=['amdgpu_tweakd'],
+    entry_points={
+        'console_scripts': [
+            'amdgpu-tweakd=amdgpu_tweakd:main',
+            'amdgpu-unlock-overdrive=amdgpu_tweakd:overdrive_unlock'
+        ],
     },
     install_requires=['jeepney>=0.4', 'pyudev>=0.20'],
+    setup_requires=['setuptools-scm'],
+    use_scm_version=True,
     cmdclass = {
         'install_systemd_unit': InstallSystemdUnit,
         'install': Install

@@ -1,9 +1,0 @@
-[Unit]
-Description=Radeon fan control
-ConditionPathExists=/etc/radeon-fan-control
-
-[Service]
-ExecStart={install_scripts}/radeon-fan-control /etc/radeon-fan-control
-
-[Install]
-WantedBy=basic.target

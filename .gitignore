@@ -1,8 +1,9 @@
-src/
-pkg/
-*.pkg.tar.xz
+/archlinux/src/
+/archlinux/pkg/
+/archlinux/*.pkg.tar.xz
+/archlinux/amdgpu-tweakd/
 
-.idea/
+/.idea/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

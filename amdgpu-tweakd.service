@@ -1,0 +1,9 @@
+[Unit]
+Description=AMDGPU settings daemon
+ConditionPathExists=/etc/amdgpu-tweakd
+
+[Service]
+ExecStart={install_scripts}/amdgpu-tweakd /etc/amdgpu-tweakd
+
+[Install]
+WantedBy=basic.target
