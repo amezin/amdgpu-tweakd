@@ -1,6 +1,8 @@
 import argparse
 import asyncio
+import collections.abc
 import configparser
+import contextlib
 import pathlib
 import signal
 import logging
@@ -12,18 +14,67 @@ import jeepney.bus_messages
 import jeepney.integrate.asyncio
 
 
+class DeviceConfig(collections.abc.Mapping):
+    def __init__(self, section):
+        super().__init__()
+        self.section = section
+
+    def warn_unused_options(self):
+        used_options = self.section.parser.used_options[self.name]
+        for k in self.keys():
+            if k not in used_options:
+                logging.warning("Unknown option %r in section %r (known options are %r)", self.name, k, used_options)
+
+    @property
+    def name(self):
+        return self.section.name
+
+    def __getitem__(self, item):
+        return self.section[item]
+
+    def __iter__(self):
+        return iter(self.section)
+
+    def __len__(self):
+        return len(self.section)
+
+    def get(self, option, fallback=None, **kwargs):
+        return self.section.get(option, fallback, **kwargs)
+
+    @contextlib.contextmanager
+    def wrap_value_errors(self, option):
+        try:
+            yield
+        except ValueError as ex:
+            raise ValueError("%r in %r: %s", option, self.name, ex) from ex
+
+    def getfloat(self, option, fallback=None, **kwargs):
+        with self.wrap_value_errors(option):
+            return self.section.getfloat(option, fallback, **kwargs)
+
+    def getboolean(self, option, fallback=None, **kwargs):
+        with self.wrap_value_errors(option):
+            return self.section.getboolean(option, fallback, **kwargs)
+
+    def getint(self, option, fallback=None, **kwargs):
+        with self.wrap_value_errors(option):
+            return self.section.getint(option, fallback, **kwargs)
+
+
+class Config(configparser.ConfigParser):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.used_options = {}
+
+    def get(self, section, option, **kwargs):
+        if section not in self.used_options:
+            self.used_options[section] = set()
+        self.used_options[section].add(self.optionxform(option))
+        return super().get(section, option, **kwargs)
+
+
 class HwmonDevice:
     def __init__(self, sysfs_path, config):
-        config = dict(config)
-
-        def getconfig(key, default):
-            value = config.pop(key, default)
-            try:
-                return type(default)(value)
-            except ValueError as ex:
-                logging.error("%s.%s: %s", sysfs_path, key, ex)
-                return default
-
         def getsysfs(key, default):
             path = self.sysfs_path / key;
             try:
@@ -36,22 +87,16 @@ class HwmonDevice:
         self.pwm_path = self.sysfs_path / 'pwm1'
         self.pwm_enable_path = self.sysfs_path / 'pwm1_enable'
         self.temp_path = self.sysfs_path / 'temp1_input'
-        self.pwm_min = getconfig('pwm_min', getsysfs('pwm1_min', 0.0))
-        self.pwm_max = getconfig('pwm_max', getsysfs('pwm1_max', 255.0))
-        self.temp_min = getconfig('temp_min', 40.0)
-        self.temp_max = getconfig('temp_max', getsysfs('temp1_crit', 90000.0) / 1000.0 - 5.0)
+        self.pwm_min = config.getfloat('pwm_min', getsysfs('pwm1_min', 0.0))
+        self.pwm_max = config.getfloat('pwm_max', getsysfs('pwm1_max', 255.0))
+        self.temp_min = config.getfloat('temp_min', 40.0)
+        self.temp_max = config.getfloat('temp_max', getsysfs('temp1_crit', 90000.0) / 1000.0 - 5.0)
         self.pwm_delta = self.pwm_max - self.pwm_min
         self.temp_delta = self.temp_max - self.temp_min
-        self.curve_pow = getconfig('curve_pow', 2.0)
-        self.semi_passive = getconfig('semi_passive', False)
-        self.semi_passive_hyst = getconfig('semi_passive_hyst', 5.0)
+        self.curve_pow = config.getfloat('curve_pow', 2.0)
+        self.semi_passive = config.getboolean('semi_passive', False)
+        self.semi_passive_hyst = config.getfloat('semi_passive_hyst', 5.0)
         self.passive = False
-
-        for k in config.keys():
-            if k.lower() not in DeviceMatchingInfo.ATTRS:
-                if k.upper() not in DeviceMatchingInfo.PROPS:
-                    logging.warning("Unknown parameter %r", k)
-
         self.prev_pwm_enable = None
 
         logging.info("Created device: %r", self.__dict__)
@@ -151,8 +196,14 @@ async def update_loop(config, udev):
 
         logging.info("Matched config %r to %r (score %d)", section.name, device, score)
 
+        device_config = DeviceConfig(section)
         for hwmon_device in udev.list_devices(subsystem='hwmon', parent=device):
-            devices[hwmon_device.sys_path] = HwmonDevice(hwmon_device.sys_path, section)
+            try:
+                devices[hwmon_device.sys_path] = HwmonDevice(hwmon_device.sys_path, device_config)
+            except Exception:
+                logging.exception("Failed to enable fan control for device %s", hwmon_device.sys_path)
+
+        device_config.warn_unused_options()
 
     try:
         while True:
@@ -228,7 +279,7 @@ def main(*args, **kwargs):
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    config = configparser.ConfigParser()
+    config = Config()
     config.read(arg.config)
 
     main_loop = asyncio.get_event_loop()
