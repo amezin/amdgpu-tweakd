@@ -115,14 +115,15 @@ class DeviceMatchingInfo:
         }
 
     def match(self, section):
-        match_props = section & self.props.keys()
-        for p in match_props:
-            if section[p] != self.props[p]:
+        match_props = {p: section[p] for p in self.props.keys() if p in section}
+        match_attrs = {a: section[a] for a in self.attrs.keys() if a in section}
+
+        for p, v in match_props.items():
+            if v != self.props[p]:
                 return -1
 
-        match_attrs = section & self.attrs.keys()
-        for a in match_attrs:
-            if section[a].encode(self.UDEV_ATTR_ENCODING) != self.attrs[a]:
+        for a, v in match_attrs.items():
+            if v.encode(self.UDEV_ATTR_ENCODING) != self.attrs[a]:
                 return -1
 
         return len(match_props) + len(match_attrs)
