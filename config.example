@@ -4,3 +4,12 @@ vbios_version=113-D0500110-O01
 pwm_min=35
 temp_min=40
 curve_pow=3
+semi_passive=True
+
+[Sapphire RX 580 Pulse]
+pci_id=1002:67DF
+vbios_version=113-4E353BU-O4E
+pwm_min=35
+temp_min=40
+curve_pow=3
+semi_passive=True
