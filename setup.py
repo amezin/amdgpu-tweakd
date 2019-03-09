@@ -89,11 +89,11 @@ class Install(setuptools.command.install.install):
 
 setuptools.setup(
     name='amdgpu-tweakd',
-    py_modules=['amdgpu_tweakd'],
+    packages=setuptools.find_packages(),
     entry_points={
         'console_scripts': [
-            'amdgpu-tweakd=amdgpu_tweakd:main',
-            'amdgpu-unlock-overdrive=amdgpu_tweakd:overdrive_unlock'
+            'amdgpu-tweakd=amdgpu_tweakd.daemon:main',
+            'amdgpu-unlock-overdrive=amdgpu_tweakd.overdrive_unlock:main'
         ],
     },
     install_requires=['jeepney>=0.4', 'pyudev>=0.20'],

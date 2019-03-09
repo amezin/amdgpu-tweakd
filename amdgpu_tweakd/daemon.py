@@ -5,16 +5,15 @@ import collections.abc
 import configparser
 import logging
 import pathlib
-import shutil
 import signal
-import shlex
-import subprocess
 import sys
 
 import pyudev
 
 import jeepney.bus_messages
 import jeepney.integrate.asyncio
+
+from .overdrive_unlock import PP_OVERDRIVE_MASK, ppfeaturemask_path
 
 
 UDEV_ATTR_ENCODING = codecs.getencoder(sys.getfilesystemencoding())
@@ -45,9 +44,6 @@ DEVICE_CONFIG_DEFAULTS = {
 }
 
 DeviceConfig = collections.namedtuple('DeviceConfig', ['name'] + list(DEVICE_CONFIG_FIELDS.keys()))
-
-PP_OVERDRIVE_MASK = 0x4000
-ppfeaturemask_path = pathlib.Path('/sys/module/amdgpu/parameters/ppfeaturemask')
 
 
 class FanController:
@@ -339,54 +335,6 @@ def parse_device_config(section):
             logging.warning("Unknown option %r in section %r (known options: %r)", option, section.name, parsed.keys())
 
     return DeviceConfig(name=section.name, **parsed)
-
-
-def interactive_confirm(prompt):
-    while True:
-        response = input(prompt + ' (y/n) ').lower()
-        if response == 'y':
-            return True
-        if response == 'n':
-            return False
-        print("Response {} is not recognized. Please type 'y' or 'n'.")
-
-
-def run_if_found(args):
-    cmd = shutil.which(args[0])
-    pretty_cmd = ' '.join(shlex.quote(a) for a in args)
-    if cmd:
-        if interactive_confirm("{!r} found at {}. Run {!r} automatically?".format(args[0], cmd, pretty_cmd)):
-            subprocess.check_call([cmd] + args[1:])
-            return True
-
-    return False
-
-
-def overdrive_unlock():
-    modconf_path = pathlib.Path('/etc/modprobe.d/amdgpu-overdrive.conf')
-    modconf_data = 'options amdgpu ppfeaturemask={}'.format(ppfeaturemask | PP_OVERDRIVE_MASK)
-    if modconf_path.exists():
-        modconf_current = modconf_path.read_text()
-    else:
-        modconf_current = None
-
-    ppfeaturemask = int(ppfeaturemask_path.read_bytes())
-    if (PP_OVERDRIVE_MASK & ppfeaturemask) or (modconf_current == modconf_data):
-        print("Overdrive is already enabled")
-        return
-
-    modconf_path.write_text(modconf_data)
-
-    print("{} has been written. Please update your initramfs and reboot.".format(modconf_path))
-
-    if run_if_found(['update-initramfs', '-u']):
-        return
-
-    if run_if_found(['mkinitcpio', '-P']):
-        return
-
-    if run_if_found(['dracut', '--regenerate-all', '-f']):
-        return
 
 
 def main(*args, **kwargs):
