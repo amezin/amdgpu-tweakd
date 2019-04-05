@@ -98,6 +98,7 @@ setuptools.setup(
     },
     install_requires=['jeepney>=0.4', 'pyudev>=0.20'],
     setup_requires=['setuptools-scm'],
+    python_requires='>=3.5',
     use_scm_version=True,
     cmdclass = {
         'install_systemd_unit': InstallSystemdUnit,
