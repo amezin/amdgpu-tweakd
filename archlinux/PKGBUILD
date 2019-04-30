@@ -9,6 +9,7 @@ conflicts=('radeon-fan-control')
 source=("$pkgname::git+file://$(git rev-parse --show-toplevel)#commit=$(git rev-parse HEAD)")
 md5sums=(SKIP)
 backup=(etc/amdgpu-tweakd)
+license=(GPL3)
 
 pkgver() {
     cd $pkgname
