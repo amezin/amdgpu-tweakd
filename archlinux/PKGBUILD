@@ -1,5 +1,5 @@
 pkgname=amdgpu-tweakd
-pkgver=0.1.dev31+gf083ffe
+pkgver=0.1.dev36+g19d2d04
 pkgrel=1
 pkgdesc="Radeon fan control"
 arch=('any')
@@ -8,6 +8,7 @@ makedepends=('python-setuptools-scm')
 conflicts=('radeon-fan-control')
 source=("$pkgname::git+file://$(git rev-parse --show-toplevel)#commit=$(git rev-parse HEAD)")
 md5sums=(SKIP)
+backup=(etc/amdgpu-tweakd)
 
 pkgver() {
     cd $pkgname
@@ -22,4 +23,8 @@ build() {
 package() {
     cd $pkgname
     python setup.py install --prefix=/usr --root="${pkgdir}/" --optimize=1 --skip-build
+
+    install -dm755 "${pkgdir}/usr/share/doc/${pkgname}"
+    install -Dm644 config.example "${pkgdir}/usr/share/doc/${pkgname}/config.example"
+    install -Dm644 config.example "${pkgdir}/etc/amdgpu-tweakd"
 }
