@@ -12,3 +12,12 @@ Currently implemented:
 - Power limit setting
 - All changes are automatically rolled back when the daemon stops
 - All settings are automatically reapplied when the system resumes from sleep/hibernation
+
+Installation:
+- Arch Linux: `PKGBUILD` is provided in `archlinux` folder
+- Other Linux: TODO. But it's mostly a regular Python application, installable using `setup.py`
+
+Configuration:
+- Provided systemd unit (`amdgpu-tweakd.service`) expects configuration in `/etc/amdgpu-tweakd`. See `config.example`
+- `# systemctl restart amdgpu-tweakd` to apply the configuration
+- If you want to adjust the power limit, you may need to unlock overdrive first. Run `# amdgpu-unlock-overdrive` to do it.
