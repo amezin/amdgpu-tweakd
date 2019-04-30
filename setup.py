@@ -103,5 +103,10 @@ setuptools.setup(
     cmdclass = {
         'install_systemd_unit': InstallSystemdUnit,
         'install': Install
-    }
+    },
+    author='Aleksandr Mezin',
+    author_email='mezin.alexander@gmail.com',
+    description='amdgpu fan speed control and power limit tweak',
+    license='GPL3',
+    url='https://github.com/amezin/amdgpu-tweakd'
 )
