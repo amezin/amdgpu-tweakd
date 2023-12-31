@@ -1,3 +1,8 @@
+UNMAINTAINED
+------------
+I'm not using this script myself and not sure if it still works.
+Fan control takes only one sensor into account - this might be bad, or, at least, not optimal.
+
 amdgpu-tweakd
 -------------
 
